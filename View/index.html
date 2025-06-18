@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Camera Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+    }
+    img {
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+    }
+    canvas {
+      display: none;
+    }
+    button {
+      font-size: 1.2em;
+      padding: 0.5em 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Camera Stream</h1>
+
+  <button onclick="capture()">📸 Capture Image</button><br><br>
+
+  <img id="cam" src="/stream" crossorigin="anonymous">
+  <canvas id="canvas" width="640" height="480"></canvas>
+
+  <script>
+    function capture() {
+      const cam = document.getElementById('cam');
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // Match canvas size to current image display size
+      canvas.width = cam.naturalWidth || cam.videoWidth || 640;
+      canvas.height = cam.naturalHeight || cam.videoHeight || 480;
+
+      ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
+
+      const now = new Date();
+      const timestamp = now.toISOString()
+        .replace(/T/, '_')
+        .replace(/:/g, '-')
+        .replace(/\..+/, '');
+
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        // iOS workaround — create a new window with the image if download fails
+        if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
+          const newWindow = window.open("");
+          newWindow.document.write('<img src="' + url + '" style="width:100%">');
+        } else {
+          a.href = url;
+          a.download = `snapshot_${timestamp}.jpg`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+
+        URL.revokeObjectURL(url);
+      }, 'image/jpeg');
+    }
+  </script>
+</body>
+</html>
+
