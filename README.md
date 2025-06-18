@@ -1,2 +1,2 @@
 # PetCam
-for JOOHOO's birthday gift
+For JOOHOO's birthday gift
