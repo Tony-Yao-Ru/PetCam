@@ -94,8 +94,9 @@ int capture_frame(unsigned char **data, int *length) {
     vbuf.index = 0;
 
     if (ioctl(cam_fd, VIDIOC_QBUF, &vbuf) < 0) return -1;
-    if (ioctl(cam_fd, VIDIOC_STREAMON, &vbuf.type) < 0) return -1;
-
+    if (ioctl(cam_fd, VIDIOC_STREAMON, &vbuf.type) < 0) return -1;       // Tell the camera to start streaming
+    
+    // Wait for I/O operation
     fd_set fds;
     struct timeval tv;
     FD_ZERO(&fds);
@@ -103,7 +104,9 @@ int capture_frame(unsigned char **data, int *length) {
     tv.tv_sec = 2;
     tv.tv_usec = 0;
 
-    if (select(cam_fd + 1, &fds, NULL, NULL, &tv) < 0) return -1;
+    if (select(cam_fd + 1, &fds, NULL, NULL, &tv) < 0) return -1;        // Wait for the camera becomes ready for a read operation
+									 // select() system call can send the signal when it is ready
+									 // to start saving the file. 
 
     if (ioctl(cam_fd, VIDIOC_DQBUF, &vbuf) < 0) return -1;
 
@@ -126,7 +129,12 @@ void *client_thread(void *arg) {
              "Expires: 0\r\n"
              "Cache-Control: no-cache, private\r\n"
              "Pragma: no-cache\r\n"
-             "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n");
+             "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"); // multipart/x-mixed-replace is an HTTP content type
+										 // Your server can use it to push dynamically updated content 
+										 // to the web browser. It works by telling the browser to 
+										 // keep the connection open and replace the web page or 
+										 // piece of media it is displaying with another 
+										 // when it receives a special token.
     send(client_fd, header, strlen(header), 0);
 
     for (;;) {
@@ -236,41 +244,11 @@ int main()
 		
 		recv(*newsockfd, rcvData, sizeof(rcvData)-1, 0);
 		rcvData[sizeof(rcvData)-1] = '\0';  // null-terminate
-
+        /*(c) Distinguish the request from the client */
 		if (strncmp(rcvData, "GET /stream", 11) == 0) {
     			pthread_t tid;
     			pthread_create(&tid, NULL, client_thread, newsockfd);
     			pthread_detach(tid);
-		} else if (strncmp(rcvData, "POST /audio", 11) == 0) {
-    			FILE *f = fopen("temp.webm", "wb");
-    			if (!f) {
-        			perror("fopen temp.webm");
-        			close(*newsockfd);
-        			free(newsockfd);
-        			continue;
-    			}
-
-    			char *body = strstr(rcvData, "\r\n\r\n");
-    			if (body) {
-        			body += 4;
-        			fwrite(body, 1, strlen(body), f);
-    			}
-
-    			// Read remaining POST body
-    			char buf[4096];
-    			int n;
-    			while ((n = recv(*newsockfd, buf, sizeof(buf), 0)) > 0) {
-        			fwrite(buf, 1, n, f);
-    			}	
-    			fclose(f);
-
-    			// Play audio on Bluetooth speaker
-    			system("ffplay -nodisp -autoexit -loglevel quiet temp.webm &");
-
-    			const char *ok = "HTTP/1.0 200 OK\r\n\r\nAudio received";
-    			send(*newsockfd, ok, strlen(ok), 0);
-    			close(*newsockfd);
-    			free(newsockfd);
 		} else {
     			serve_html(*newsockfd);
     			close(*newsockfd);
