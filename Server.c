@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include "motor_control.h"
 
 #define PORT 8080
 #define MAXCLIENTS 10
@@ -26,6 +27,8 @@ struct cambuffer {
 int cam_fd;
 struct cambuffer cam_buf;
 pthread_mutex_t cam_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct gpiod_chip *g_chip = NULL;
 
 
 // Print a descriptive error msg
@@ -214,6 +217,12 @@ int main()
 		return -1;
 	}
 	
+	g_chip = gpiod_chip_open_by_name(CHIPNAME);
+	if (!g_chip) {
+		error("Failed to open GPIO chip");
+		return -1;
+	}
+
 	signal(SIGPIPE, SIG_IGN);
 
 	/*(a) Create socket for incoming request */
@@ -241,14 +250,38 @@ int main()
 		*newsockfd = accept(sockfd, NULL, NULL);
                      
 		if (*newsockfd < 0) continue;
-		
+	
 		recv(*newsockfd, rcvData, sizeof(rcvData)-1, 0);
 		rcvData[sizeof(rcvData)-1] = '\0';  // null-terminate
+		//printf("Received data:\n%s\n", rcvData);
         /*(c) Distinguish the request from the client */
 		if (strncmp(rcvData, "GET /stream", 11) == 0) {
     			pthread_t tid;
     			pthread_create(&tid, NULL, client_thread, newsockfd);
     			pthread_detach(tid);
+		} else if (strncmp(rcvData, "GET /control?dir=", 17) == 0) {
+			char *dir_start = rcvData + 17;
+			char direction[16] = {0};
+			sscanf(dir_start, "%15[^ ]", direction);
+			
+			printf("Received control command: %s\n", direction);
+			
+			
+    			if (strcmp(direction, "left") == 0) {
+				onClickedLeft(g_chip);
+    			} else if (strcmp(direction, "right") == 0) {
+        			onClickedRight(g_chip);
+    			} else if (strcmp(direction, "go") == 0) {
+        			onClickedForward(g_chip);
+    			} else if (strcmp(direction, "back") == 0) {
+        			onClickedBackward(g_chip);
+    			}
+			
+
+		        const char *response = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nCommand received\n";
+			send(*newsockfd, response, strlen(response), 0);
+			close(*newsockfd);
+		        free(newsockfd);			
 		} else {
     			serve_html(*newsockfd);
     			close(*newsockfd);

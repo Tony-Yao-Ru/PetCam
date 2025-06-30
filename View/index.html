@@ -19,6 +19,10 @@
     button {
       font-size: 1.2em;
       padding: 0.5em 1em;
+      margin: 0.3em;
+    }
+    .controls {
+      margin-top: 1em;
     }
   </style>
 </head>
@@ -30,13 +34,19 @@
   <img id="cam" src="/stream" crossorigin="anonymous">
   <canvas id="canvas" width="640" height="480"></canvas>
 
+  <div class="controls">
+    <button onclick="sendCommand('left')">⬅️ Left</button>
+    <button onclick="sendCommand('go')">⬆️ Go</button>
+    <button onclick="sendCommand('back')">⬇️ Back</button>
+    <button onclick="sendCommand('right')">➡️ Right</button>
+  </div>
+
   <script>
     function capture() {
       const cam = document.getElementById('cam');
       const canvas = document.getElementById('canvas');
       const ctx = canvas.getContext('2d');
 
-      // Match canvas size to current image display size
       canvas.width = cam.naturalWidth || cam.videoWidth || 640;
       canvas.height = cam.naturalHeight || cam.videoHeight || 480;
 
@@ -52,7 +62,6 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
 
-        // iOS workaround — create a new window with the image if download fails
         if (navigator.userAgent.includes("iPhone") || navigator.userAgent.includes("iPad")) {
           const newWindow = window.open("");
           newWindow.document.write('<img src="' + url + '" style="width:100%">');
@@ -66,6 +75,19 @@
 
         URL.revokeObjectURL(url);
       }, 'image/jpeg');
+    }
+
+    function sendCommand(direction) {
+      fetch(`/control?dir=${direction}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error("Command failed");
+          }
+          console.log(`Sent command: ${direction}`);
+        })
+        .catch(error => {
+          console.error("Error sending command:", error);
+        });
     }
   </script>
 </body>
